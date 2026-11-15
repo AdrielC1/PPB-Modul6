@@ -220,19 +220,22 @@ export function MonitoringScreen() {
 		) {
 			return null;
 		}
+		let status = "normal";
 		let tone = "below threshold";
 		let statusWord = "Normal";
-		let statusColor = color.successText;
+		let statusColor = "#0369A1";
 		if (temperature >= latestThreshold) {
+			status = "over";
 			tone = "at or above threshold";
 			statusWord = "Over limit";
 			statusColor = color.dangerText;
 		} else if (temperature >= latestThreshold - 2) {
+			status = "near";
 			tone = "near threshold";
 			statusWord = "Near limit";
 			statusColor = color.warnText;
 		}
-		return { tone, statusWord, statusColor };
+		return { status, tone, statusWord, statusColor };
 	}, [temperature, latestThreshold]);
 
 	const freshness = useMemo(() => {
@@ -299,7 +302,9 @@ export function MonitoringScreen() {
 					>
 						<View style={styles.orbWrap}>
 							<TempOrb
-								tint={proximity ? proximity.statusColor : color.text}
+								temperature={temperature}
+								threshold={latestThreshold}
+								status={proximity ? proximity.status : "normal"}
 								beatKey={beatKey}
 								dimmed={
 									connectionState !== "connected" &&
@@ -308,37 +313,39 @@ export function MonitoringScreen() {
 								size={320}
 							/>
 							<View style={styles.orbNumber} pointerEvents="none">
-								<View style={styles.orbNumberRow}>
-									<Text
-										style={[
-											styles.temperatureText,
-											{ color: proximity ? proximity.statusColor : color.text },
-										]}
-										selectable
-									>
-										{tempLabel}
-									</Text>
-									<Text
-										style={[
-											styles.unitText,
-											{
-												color: proximity ? proximity.statusColor : color.text2,
-											},
-										]}
-									>
-										°C
-									</Text>
+								<View style={styles.orbReadoutPill}>
+									<View style={styles.orbNumberRow}>
+										<Text
+											style={[
+												styles.temperatureText,
+												{ color: proximity ? proximity.statusColor : color.text },
+											]}
+											selectable
+										>
+											{tempLabel}
+										</Text>
+										<Text
+											style={[
+												styles.unitText,
+												{
+													color: proximity ? proximity.statusColor : color.text2,
+												},
+											]}
+										>
+											°C
+										</Text>
+									</View>
+									{proximity ? (
+										<Text
+											style={[
+												styles.statusWord,
+												{ color: proximity.statusColor },
+											]}
+										>
+											{proximity.statusWord}
+										</Text>
+									) : null}
 								</View>
-								{proximity ? (
-									<Text
-										style={[
-											styles.statusWord,
-											{ color: proximity.statusColor },
-										]}
-									>
-										{proximity.statusWord}
-									</Text>
-								) : null}
 							</View>
 						</View>
 					</View>
@@ -579,10 +586,21 @@ const styles = StyleSheet.create({
 		left: 0,
 		right: 0,
 		bottom: 0,
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	orbReadoutPill: {
 		flexDirection: "column",
 		alignItems: "center",
 		justifyContent: "center",
 		gap: 2,
+		paddingHorizontal: space.lg,
+		paddingVertical: space.sm,
+		borderRadius: 18,
+		borderCurve: "continuous",
+		backgroundColor: "rgba(255, 255, 255, 0.88)",
+		borderWidth: 1,
+		borderColor: "rgba(255, 255, 255, 0.95)",
 	},
 	orbNumberRow: {
 		flexDirection: "row",
