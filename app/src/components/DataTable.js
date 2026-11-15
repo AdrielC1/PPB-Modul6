@@ -82,6 +82,7 @@ export function DataTable({
   onEmptyAction,
   loading = false,
   loadingRows = 3,
+  footer = null,
 }) {
   if (!columns?.length) {
     return null;
@@ -143,6 +144,7 @@ export function DataTable({
           ) : null}
         </View>
       )}
+      {!loading && hasData ? footer : null}
     </View>
   );
 }

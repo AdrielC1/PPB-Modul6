@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Pressable,
 	RefreshControl,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Haptics from "expo-haptics";
 import Animated, {
 	FadeIn,
 	FadeInDown,
@@ -17,12 +18,14 @@ import Animated, {
 import { useMqttSensor } from "../hooks/useMqttSensor.js";
 import { Api } from "../services/api.js";
 import { DataTable } from "../components/DataTable.js";
+import { Pagination } from "../components/Pagination.js";
 import { TempOrb } from "../components/TempOrb.js";
 import { TrendChart } from "../components/TrendChart.js";
 import { tokens } from "../theme/tokens.js";
 
 const { color, space, radius, shadow } = tokens;
 const MAX_TREND_POINTS = 12;
+const READINGS_PAGE_SIZE = 20;
 
 function StatusChip({ connectionState, hasError, onRetry }) {
 	const config = useMemo(() => {
@@ -105,12 +108,15 @@ export function MonitoringScreen() {
 		error: mqttError,
 	} = useMqttSensor();
 	const [readings, setReadings] = useState([]);
+	const [currentPage, setCurrentPage] = useState(1);
 	const [trendPoints, setTrendPoints] = useState([]);
 	const [latestThreshold, setLatestThreshold] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 	const [apiError, setApiError] = useState(null);
 	const reduceMotion = useReducedMotion();
+	const scrollViewRef = useRef(null);
+	const historyTopYRef = useRef(0);
 
 	useEffect(() => {
 		if (typeof temperature !== "number" || !timestamp) return;
@@ -167,12 +173,45 @@ export function MonitoringScreen() {
 	const onRefresh = useCallback(async () => {
 		setRefreshing(true);
 		setTrendPoints([]);
+		setCurrentPage(1);
 		try {
 			await fetchReadings();
 		} finally {
 			setRefreshing(false);
 		}
 	}, [fetchReadings]);
+
+	const totalReadings = Array.isArray(readings) ? readings.length : 0;
+	const totalPages = Math.max(1, Math.ceil(totalReadings / READINGS_PAGE_SIZE));
+	const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+	useEffect(() => {
+		if (currentPage > totalPages) {
+			setCurrentPage(totalPages);
+		}
+	}, [currentPage, totalPages]);
+
+	const pagedReadings = useMemo(() => {
+		if (!Array.isArray(readings) || readings.length === 0) {
+			return [];
+		}
+		const start = (safePage - 1) * READINGS_PAGE_SIZE;
+		return readings.slice(start, start + READINGS_PAGE_SIZE);
+	}, [readings, safePage]);
+
+	const handlePageChange = useCallback(
+		(nextPage) => {
+			const target = Math.max(1, Math.min(nextPage, totalPages));
+			if (target === safePage) return;
+			Haptics.selectionAsync().catch(() => {});
+			setCurrentPage(target);
+			scrollViewRef.current?.scrollTo({
+				y: Math.max(0, historyTopYRef.current - space.md),
+				animated: !reduceMotion,
+			});
+		},
+		[totalPages, safePage, reduceMotion],
+	);
 
 	const proximity = useMemo(() => {
 		if (
@@ -223,6 +262,7 @@ export function MonitoringScreen() {
 	return (
 		<View style={styles.safe}>
 			<ScrollView
+				ref={scrollViewRef}
 				contentContainerStyle={styles.container}
 				contentInsetAdjustmentBehavior="automatic"
 				refreshControl={
@@ -402,14 +442,19 @@ export function MonitoringScreen() {
 					</View>
 				) : null}
 
-				<View style={styles.sectionHeader}>
+				<View
+					style={styles.sectionHeader}
+					onLayout={(e) => {
+						historyTopYRef.current = e.nativeEvent.layout.y;
+					}}
+				>
 					<View style={styles.sectionTitleRow}>
 						<Text style={styles.sectionTitle}>Triggered Alarm History</Text>
-						{Array.isArray(readings) && readings.length > 0 ? (
+						{totalReadings > 0 ? (
 							<View style={styles.countPill}>
 								<Text style={styles.countText}>
-									{readings.length}{" "}
-									{readings.length === 1 ? "reading" : "readings"}
+									{totalReadings}{" "}
+									{totalReadings === 1 ? "reading" : "readings"}
 								</Text>
 							</View>
 						) : null}
@@ -443,13 +488,21 @@ export function MonitoringScreen() {
 								typeof value === "number" ? Number(value).toFixed(2) : "--",
 						},
 					]}
-					data={readings}
+					data={pagedReadings}
 					keyExtractor={(item) => item.id}
 					loading={loading && !refreshing}
 					emptyTitle="No readings yet"
 					emptyMessage="Triggered readings appear here. Pull to refresh."
 					emptyActionLabel="Refresh"
 					onEmptyAction={fetchReadings}
+					footer={
+						<Pagination
+							currentPage={safePage}
+							totalItems={totalReadings}
+							pageSize={READINGS_PAGE_SIZE}
+							onPageChange={handlePageChange}
+						/>
+					}
 				/>
 			</ScrollView>
 		</View>
