@@ -7,6 +7,7 @@ import { enableScreens } from "react-native-screens";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MonitoringScreen } from "./src/screens/MonitoringScreen.js";
 import { ControlScreen } from "./src/screens/ControlScreen.js";
+import { ProfileScreen } from "./src/screens/ProfileScreen.js";
 import { LiveTempSplash } from "./src/components/LiveTempSplash.js";
 import { assertConfig } from "./src/services/config.js";
 import { tokens } from "./src/theme/tokens.js";
@@ -75,14 +76,20 @@ export default function App() {
               borderTopColor: color.border,
             },
             tabBarHideOnKeyboard: true,
-            tabBarIcon: ({ color: iconColor }) => {
-              const iconName = route.name === "Monitoring" ? "pulse" : "options";
+            tabBarIcon: ({ color: iconColor, focused }) => {
+              const iconMap = {
+                Monitoring: focused ? "pulse" : "pulse-outline",
+                Control: focused ? "options" : "options-outline",
+                Profile: focused ? "people" : "people-outline",
+              };
+              const iconName = iconMap[route.name] || "pulse";
               return <Ionicons name={iconName} size={24} color={iconColor} />;
             },
           })}
         >
           <Tab.Screen name="Monitoring" component={MonitoringScreen} />
           <Tab.Screen name="Control" component={ControlScreen} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>
