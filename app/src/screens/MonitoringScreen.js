@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Pressable,
 	RefreshControl,
@@ -18,9 +18,11 @@ import { useMqttSensor } from "../hooks/useMqttSensor.js";
 import { Api } from "../services/api.js";
 import { DataTable } from "../components/DataTable.js";
 import { TempOrb } from "../components/TempOrb.js";
+import { TrendChart } from "../components/TrendChart.js";
 import { tokens } from "../theme/tokens.js";
 
 const { color, space, radius, shadow } = tokens;
+const MAX_TREND_POINTS = 12;
 
 function StatusChip({ connectionState, hasError, onRetry }) {
 	const config = useMemo(() => {
@@ -103,11 +105,40 @@ export function MonitoringScreen() {
 		error: mqttError,
 	} = useMqttSensor();
 	const [readings, setReadings] = useState([]);
+	const [trendPoints, setTrendPoints] = useState([]);
 	const [latestThreshold, setLatestThreshold] = useState(null);
 	const [loading, setLoading] = useState(false);
 	const [refreshing, setRefreshing] = useState(false);
 	const [apiError, setApiError] = useState(null);
 	const reduceMotion = useReducedMotion();
+
+	useEffect(() => {
+		if (typeof temperature !== "number" || !timestamp) return;
+		setTrendPoints((prev) => {
+			const last = prev[prev.length - 1];
+			if (
+				last &&
+				last.timestamp === timestamp &&
+				last.temperature === temperature
+			) {
+				return prev;
+			}
+			const delta = last
+				? Number((temperature - last.temperature).toFixed(2))
+				: null;
+			const nextPoint = {
+				id: `${timestamp}-${temperature}`,
+				temperature,
+				timestamp,
+				delta,
+			};
+			return [...prev.slice(-(MAX_TREND_POINTS - 1)), nextPoint];
+		});
+	}, [temperature, timestamp]);
+
+	const clearTrendPoints = useCallback(() => {
+		setTrendPoints([]);
+	}, []);
 
 	const fetchReadings = useCallback(async () => {
 		setLoading(true);
@@ -135,6 +166,7 @@ export function MonitoringScreen() {
 
 	const onRefresh = useCallback(async () => {
 		setRefreshing(true);
+		setTrendPoints([]);
 		try {
 			await fetchReadings();
 		} finally {
@@ -329,6 +361,15 @@ export function MonitoringScreen() {
 						</View>
 					) : null}
 				</Animated.View>
+
+				<TrendChart
+					points={trendPoints}
+					threshold={latestThreshold}
+					connectionState={connectionState}
+					mqttError={mqttError}
+					onReset={clearTrendPoints}
+					onRetry={onRefresh}
+				/>
 
 				{apiError && !loading ? (
 					<View
